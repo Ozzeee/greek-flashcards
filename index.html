@@ -173,6 +173,21 @@
 
   .card__face--back .card__word { color: #d1fae5; }
 
+  .speak-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px solid #4a4a7a;
+    background: rgba(45, 45, 78, 0.8);
+    font-size: 1.2rem;
+    cursor: pointer;
+  }
+  .speak-btn:hover { background: #4338ca; }
+  .speak-btn[hidden] { display: none; }
+
   .card__type {
     font-size: 0.75rem;
     padding: 3px 10px;
@@ -295,6 +310,7 @@
   </div>
 
   <button id="shuffleBtn" onclick="toggleShuffle()">🔀 Перемешать</button>
+  <button id="autoSpeakBtn" onclick="toggleAutoSpeak()" hidden>🔊 Автоозвучка</button>
   <button onclick="resetProgress()">↩ Сбросить</button>
 </div>
 
@@ -304,12 +320,14 @@
 <div class="scene" onclick="flipCard()">
   <div class="card" id="card">
     <div class="card__face card__face--front">
+      <button class="speak-btn" id="frontSpeak" onclick="speakCurrent(event)" title="Произнести (S)" hidden>🔊</button>
       <div class="card__hint" id="frontHint">ГРЕЧЕСКИЙ</div>
       <div class="card__word" id="frontWord">—</div>
       <div class="card__type" id="frontType"></div>
       <div class="card__tap-hint">нажмите, чтобы перевернуть</div>
     </div>
     <div class="card__face card__face--back">
+      <button class="speak-btn" id="backSpeak" onclick="speakCurrent(event)" title="Произнести (S)" hidden>🔊</button>
       <div class="card__hint" id="backHint">ПЕРЕВОД</div>
       <div class="card__word" id="backWord">—</div>
     </div>
@@ -460,6 +478,11 @@ function showCard() {
     document.getElementById('backWord').textContent = word.greek;
   }
 
+  // Speak button only on the Greek side, so it never gives away the answer
+  document.getElementById('frontSpeak').hidden = !greekVoice || cardDirection !== 'gr-ru';
+  document.getElementById('backSpeak').hidden = !greekVoice || cardDirection !== 'ru-gr';
+  if (autoSpeak && cardDirection === 'gr-ru') speak(word.greek);
+
   const typeEl = document.getElementById('frontType');
   typeEl.textContent = typeLabels[word.type] || word.type;
   typeEl.className = 'card__type type-' + word.type;
@@ -474,6 +497,7 @@ function flipCard() {
   card.classList.toggle('flipped', flipped);
 
   if (flipped) {
+    if (autoSpeak && cardDirection === 'ru-gr') speak(getCurrentWord().greek);
     document.getElementById('btnCorrect').classList.add('visible');
     document.getElementById('btnWrong').classList.add('visible');
   }
@@ -531,6 +555,50 @@ function updateStats() {
   document.getElementById('statLeft').textContent = Math.max(0, indices.length - currentIdx - 1);
 }
 
+// Pronunciation: browser speech synthesis with a Greek voice (built into iOS/macOS)
+let greekVoice = null;
+let autoSpeak = false;
+try { autoSpeak = localStorage.getItem('greekAutoSpeak') === '1'; } catch (e) {}
+
+function pickGreekVoice() {
+  if (!('speechSynthesis' in window)) return;
+  const voices = speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith('el'));
+  const hadVoice = !!greekVoice;
+  greekVoice = voices.find(v => v.localService) || voices[0] || null;
+  const btn = document.getElementById('autoSpeakBtn');
+  btn.hidden = !greekVoice;
+  btn.classList.toggle('active', autoSpeak);
+  if (greekVoice && !hadVoice) showCard();
+}
+
+function speak(text) {
+  if (!greekVoice || !text) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text.replace(/…/g, ''));
+  u.voice = greekVoice;
+  u.lang = greekVoice.lang;
+  u.rate = 0.85;
+  speechSynthesis.speak(u);
+}
+
+function speakCurrent(e) {
+  if (e) e.stopPropagation(); // don't flip the card
+  if (cardDirection === 'ru-gr' && !flipped) return; // would reveal the answer
+  const word = getCurrentWord();
+  if (word) speak(word.greek);
+}
+
+function toggleAutoSpeak() {
+  autoSpeak = !autoSpeak;
+  document.getElementById('autoSpeakBtn').classList.toggle('active', autoSpeak);
+  try { localStorage.setItem('greekAutoSpeak', autoSpeak ? '1' : '0'); } catch (e) {}
+}
+
+if ('speechSynthesis' in window) {
+  pickGreekVoice();
+  speechSynthesis.addEventListener('voiceschanged', pickGreekVoice);
+}
+
 // Keyboard navigation
 document.addEventListener('keydown', e => {
   if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); flipCard(); }
@@ -538,6 +606,7 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'ArrowLeft' || e.key === 'h') prevCard();
   else if (e.key === '1') answer(true);
   else if (e.key === '2') answer(false);
+  else if (e.key === 's' || e.key === 'S') speakCurrent();
 });
 
 // Init
