@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Греческие карточки</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #a78bfa;
+    margin-bottom: 16px;
+    text-align: center;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 16px;
+    width: 100%;
+    max-width: 600px;
+  }
+
+  .controls select, .controls button {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: none;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+
+  .controls select {
+    background: #2d2d4e;
+    color: #e0e0e0;
+    border: 1px solid #4a4a7a;
+  }
+
+  .controls button {
+    background: #6d28d9;
+    color: white;
+    font-weight: 500;
+    transition: background 0.2s;
+  }
+
+  .controls button:hover { background: #7c3aed; }
+  .controls button.active { background: #059669; }
+
+  .direction-toggle {
+    display: flex;
+    background: #2d2d4e;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #4a4a7a;
+  }
+
+  .direction-toggle button {
+    background: transparent;
+    color: #9ca3af;
+    border-radius: 0;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+  }
+
+  .direction-toggle button.active {
+    background: #6d28d9;
+    color: white;
+  }
+
+  .progress {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 0.85rem;
+    margin-bottom: 14px;
+  }
+
+  .progress span { color: #a78bfa; font-weight: 600; }
+
+  .progress-bar {
+    width: 100%;
+    max-width: 600px;
+    height: 4px;
+    background: #2d2d4e;
+    border-radius: 2px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #6d28d9, #a78bfa);
+    border-radius: 2px;
+    transition: width 0.3s;
+  }
+
+  /* Card scene */
+  .scene {
+    width: 100%;
+    max-width: 560px;
+    height: 260px;
+    perspective: 1000px;
+    cursor: pointer;
+    margin-bottom: 24px;
+  }
+
+  .card {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.55s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .card.flipped { transform: rotateY(180deg); }
+
+  .card__face {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    backface-visibility: hidden;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 28px;
+    text-align: center;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+
+  .card__face--front {
+    background: linear-gradient(135deg, #1e1b4b, #312e81);
+    border: 1px solid #4338ca;
+  }
+
+  .card__face--back {
+    background: linear-gradient(135deg, #064e3b, #065f46);
+    border: 1px solid #059669;
+    transform: rotateY(180deg);
+  }
+
+  .card__hint {
+    font-size: 0.75rem;
+    color: #6d6d9a;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 12px;
+  }
+
+  .card__face--back .card__hint { color: #34d399; opacity: 0.6; }
+
+  .card__word {
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: #e0e0ff;
+    line-height: 1.2;
+    margin-bottom: 8px;
+  }
+
+  .card__face--back .card__word { color: #d1fae5; }
+
+  .card__type {
+    font-size: 0.75rem;
+    padding: 3px 10px;
+    border-radius: 12px;
+    margin-top: 10px;
+    font-weight: 500;
+  }
+
+  .type-noun { background: #1e3a5f; color: #93c5fd; }
+  .type-adjective { background: #3b1f5e; color: #c4b5fd; }
+  .type-adverb { background: #1f3b2a; color: #86efac; }
+  .type-verb { background: #5e2d1e; color: #fca5a5; }
+
+  .card__tap-hint {
+    font-size: 0.72rem;
+    color: #4b5563;
+    margin-top: 14px;
+  }
+
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .nav button {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: none;
+    background: #2d2d4e;
+    color: #a78bfa;
+    font-size: 1.3rem;
+    cursor: pointer;
+    transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .nav button:hover { background: #4a4a7a; }
+  .nav button:disabled { opacity: 0.3; cursor: default; }
+
+  .counter {
+    font-size: 0.95rem;
+    color: #9ca3af;
+    min-width: 80px;
+    text-align: center;
+  }
+
+  .answers {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+
+  .answer-btn {
+    padding: 10px 24px;
+    border-radius: 10px;
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: none;
+  }
+
+  .answer-btn.visible { display: block; }
+
+  .btn-correct {
+    background: #065f46;
+    color: #34d399;
+    border: 1px solid #059669;
+  }
+
+  .btn-correct:hover { background: #047857; }
+
+  .btn-wrong {
+    background: #7f1d1d;
+    color: #fca5a5;
+    border: 1px solid #dc2626;
+  }
+
+  .btn-wrong:hover { background: #991b1b; }
+
+  .stats {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    font-size: 0.85rem;
+    color: #9ca3af;
+  }
+
+  .stats span { color: #a78bfa; font-weight: 600; }
+
+  .stats .correct { color: #34d399; }
+  .stats .wrong { color: #f87171; }
+</style>
+</head>
+<body>
+
+<h1 id="deckTitle">🇬🇷 Греческий A2 — 1000 слов</h1>
+
+<div class="controls">
+  <select id="deckSelect" onchange="setDeck(this.value)">
+    <option value="a2">A2 — 1000 слов</option>
+    <option value="b1">B1 — база из Notion</option>
+  </select>
+
+  <select id="topicFilter" onchange="applyFilters()" hidden></select>
+
+  <select id="typeFilter" onchange="applyFilters()"></select>
+
+  <div class="direction-toggle">
+    <button id="btn-gr" class="active" onclick="setDirection('gr-ru')">ГР → РУ</button>
+    <button id="btn-ru" onclick="setDirection('ru-gr')">РУ → ГР</button>
+    <button id="btn-both" onclick="setDirection('both')">Оба</button>
+  </div>
+
+  <button id="shuffleBtn" onclick="toggleShuffle()">🔀 Перемешать</button>
+  <button onclick="resetProgress()">↩ Сбросить</button>
+</div>
+
+<div class="progress" id="progressText">Карточка <span id="current">1</span> из <span id="total">0</span></div>
+<div class="progress-bar"><div class="progress-bar-fill" id="progressFill"></div></div>
+
+<div class="scene" onclick="flipCard()">
+  <div class="card" id="card">
+    <div class="card__face card__face--front">
+      <div class="card__hint" id="frontHint">ГРЕЧЕСКИЙ</div>
+      <div class="card__word" id="frontWord">—</div>
+      <div class="card__type" id="frontType"></div>
+      <div class="card__tap-hint">нажмите, чтобы перевернуть</div>
+    </div>
+    <div class="card__face card__face--back">
+      <div class="card__hint" id="backHint">ПЕРЕВОД</div>
+      <div class="card__word" id="backWord">—</div>
+    </div>
+  </div>
+</div>
+
+<div class="answers">
+  <button class="answer-btn btn-wrong" id="btnWrong" onclick="answer(false)">✗ Не знал</button>
+  <button class="answer-btn btn-correct" id="btnCorrect" onclick="answer(true)">✓ Знал</button>
+</div>
+
+<div class="nav">
+  <button onclick="prevCard()" id="prevBtn">‹</button>
+  <div class="counter" id="counter">1 / 0</div>
+  <button onclick="nextCard()" id="nextBtn">›</button>
+</div>
+
+<div class="stats">
+  <div>Знал: <span class="correct" id="statCorrect">0</span></div>
+  <div>Не знал: <span class="wrong" id="statWrong">0</span></div>
+  <div>Осталось: <span id="statLeft">0</span></div>
+</div>
+
+<script src="a2-data.js"></script>
+<script src="b1-data.js"></script>
+<script>
+let VOCAB = A2_VOCAB;
+
+const typeLabels = {
+  noun: 'Существительное',
+  adjective: 'Прилагательное',
+  adverb: 'Наречие',
+  verb: 'Глагол',
+};
+
+let filtered = [];
+let indices = [];
+let currentIdx = 0;
+let direction = 'gr-ru'; // 'gr-ru', 'ru-gr', 'both'
+let shuffled = false;
+let flipped = false;
+let stats = { correct: 0, wrong: 0 };
+let answered = false;
+
+const DECKS = {
+  a2: { title: '🇬🇷 Греческий A2 — 1000 слов', vocab: A2_VOCAB },
+  b1: { title: '🇬🇷 Греческий B1 — база Notion', vocab: B1_VOCAB },
+};
+
+function fillSelect(id, allLabel, values, labels = {}) {
+  const el = document.getElementById(id);
+  el.innerHTML = `<option value="all">${allLabel}</option>` +
+    values.map(v => `<option value="${v}">${labels[v] || v}</option>`).join('');
+}
+
+function setDeck(deck) {
+  VOCAB = DECKS[deck].vocab;
+  document.getElementById('deckTitle').textContent = DECKS[deck].title;
+  fillSelect('typeFilter', 'Все типы', [...new Set(VOCAB.map(w => w.type))], typeLabels);
+  const topics = [...new Set(VOCAB.map(w => w.topic).filter(Boolean))].sort();
+  fillSelect('topicFilter', 'Все темы', topics);
+  document.getElementById('topicFilter').hidden = topics.length === 0;
+  try { localStorage.setItem('greekDeck', deck); } catch (e) {}
+  applyFilters();
+}
+
+function applyFilters() {
+  const typeFilter = document.getElementById('typeFilter').value;
+  const topicFilter = document.getElementById('topicFilter').value || 'all';
+  filtered = VOCAB.filter(w =>
+    (typeFilter === 'all' || w.type === typeFilter) &&
+    (topicFilter === 'all' || w.topic === topicFilter));
+  indices = filtered.map((_, i) => i);
+  if (shuffled) shuffleArray(indices);
+  currentIdx = 0;
+  stats = { correct: 0, wrong: 0 };
+  answered = false;
+  updateStats();
+  showCard();
+}
+
+function setDirection(dir) {
+  direction = dir;
+  document.getElementById('btn-gr').classList.toggle('active', dir === 'gr-ru');
+  document.getElementById('btn-ru').classList.toggle('active', dir === 'ru-gr');
+  document.getElementById('btn-both').classList.toggle('active', dir === 'both');
+  showCard();
+}
+
+function toggleShuffle() {
+  shuffled = !shuffled;
+  document.getElementById('shuffleBtn').classList.toggle('active', shuffled);
+  if (shuffled) shuffleArray(indices);
+  else indices = filtered.map((_, i) => i);
+  currentIdx = 0;
+  showCard();
+}
+
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+function getCurrentWord() {
+  if (indices.length === 0) return null;
+  return filtered[indices[currentIdx]];
+}
+
+function getDirectionForCard() {
+  if (direction === 'gr-ru') return 'gr-ru';
+  if (direction === 'ru-gr') return 'ru-gr';
+  return Math.random() < 0.5 ? 'gr-ru' : 'ru-gr';
+}
+
+let cardDirection = 'gr-ru';
+
+function showCard() {
+  const word = getCurrentWord();
+  const card = document.getElementById('card');
+  
+  // Reset flip
+  card.classList.remove('flipped');
+  flipped = false;
+  answered = false;
+
+  document.getElementById('btnCorrect').classList.remove('visible');
+  document.getElementById('btnWrong').classList.remove('visible');
+
+  if (!word) {
+    document.getElementById('frontWord').textContent = 'Нет слов';
+    document.getElementById('backWord').textContent = '—';
+    return;
+  }
+
+  cardDirection = direction === 'both' ? (Math.random() < 0.5 ? 'gr-ru' : 'ru-gr') : direction;
+
+  if (cardDirection === 'gr-ru') {
+    document.getElementById('frontHint').textContent = 'ГРЕЧЕСКИЙ';
+    document.getElementById('backHint').textContent = 'ПЕРЕВОД';
+    document.getElementById('frontWord').textContent = word.greek;
+    document.getElementById('backWord').textContent = word.russian;
+  } else {
+    document.getElementById('frontHint').textContent = 'РУССКИЙ';
+    document.getElementById('backHint').textContent = 'ГРЕЧЕСКИЙ';
+    document.getElementById('frontWord').textContent = word.russian;
+    document.getElementById('backWord').textContent = word.greek;
+  }
+
+  const typeEl = document.getElementById('frontType');
+  typeEl.textContent = typeLabels[word.type] || word.type;
+  typeEl.className = 'card__type type-' + word.type;
+
+  updateProgress();
+}
+
+function flipCard() {
+  if (answered) return;
+  const card = document.getElementById('card');
+  flipped = !flipped;
+  card.classList.toggle('flipped', flipped);
+
+  if (flipped) {
+    document.getElementById('btnCorrect').classList.add('visible');
+    document.getElementById('btnWrong').classList.add('visible');
+  }
+}
+
+function answer(correct) {
+  if (answered) return;
+  answered = true;
+  if (correct) stats.correct++;
+  else stats.wrong++;
+  updateStats();
+
+  setTimeout(() => {
+    nextCard();
+  }, 300);
+}
+
+function nextCard() {
+  if (currentIdx < indices.length - 1) {
+    currentIdx++;
+    showCard();
+  }
+}
+
+function prevCard() {
+  if (currentIdx > 0) {
+    currentIdx--;
+    showCard();
+  }
+}
+
+function resetProgress() {
+  stats = { correct: 0, wrong: 0 };
+  currentIdx = 0;
+  answered = false;
+  if (shuffled) shuffleArray(indices);
+  updateStats();
+  showCard();
+}
+
+function updateProgress() {
+  const total = indices.length;
+  const curr = currentIdx + 1;
+  document.getElementById('current').textContent = curr;
+  document.getElementById('total').textContent = total;
+  document.getElementById('counter').textContent = curr + ' / ' + total;
+  document.getElementById('progressFill').style.width = (curr / total * 100) + '%';
+  document.getElementById('prevBtn').disabled = currentIdx === 0;
+  document.getElementById('nextBtn').disabled = currentIdx === indices.length - 1;
+}
+
+function updateStats() {
+  document.getElementById('statCorrect').textContent = stats.correct;
+  document.getElementById('statWrong').textContent = stats.wrong;
+  document.getElementById('statLeft').textContent = Math.max(0, indices.length - currentIdx - 1);
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', e => {
+  if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); flipCard(); }
+  else if (e.key === 'ArrowRight' || e.key === 'l') nextCard();
+  else if (e.key === 'ArrowLeft' || e.key === 'h') prevCard();
+  else if (e.key === '1') answer(true);
+  else if (e.key === '2') answer(false);
+});
+
+// Init
+let savedDeck = 'a2';
+try { savedDeck = localStorage.getItem('greekDeck') || 'a2'; } catch (e) {}
+if (!DECKS[savedDeck]) savedDeck = 'a2';
+document.getElementById('deckSelect').value = savedDeck;
+setDeck(savedDeck);
+</script>
+</body>
+</html>
