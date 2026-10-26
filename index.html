@@ -295,12 +295,41 @@
   }
   .user-bar strong { color: #a78bfa; }
   .user-bar.warn { color: #fbbf24; }
+
+  .week {
+    width: 100%;
+    max-width: 600px;
+    background: #23233f;
+    border: 1px solid #3a3a66;
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin-bottom: 16px;
+    font-size: 0.85rem;
+    color: #c7c7e0;
+  }
+  .week__row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .week__main strong { color: #a78bfa; font-size: 1.05rem; }
+  .week.done .week__main strong { color: #34d399; }
+  .week__bar { height: 6px; background: #2d2d4e; border-radius: 3px; margin: 8px 0 6px; overflow: hidden; }
+  .week__fill { height: 100%; background: linear-gradient(90deg, #6d28d9, #a78bfa); transition: width 0.3s; }
+  .week.done .week__fill { background: #34d399; }
+  .week__sub { color: #9ca3af; font-size: 0.78rem; }
+  .week__edit { background: none; border: none; color: #a78bfa; font-size: 0.78rem; cursor: pointer; text-decoration: underline; padding: 0; }
   .stats .wrong { color: #f87171; }
 </style>
 </head>
 <body>
 
 <div class="user-bar" id="userBar">Загрузка…</div>
+<div class="week" id="weekPanel">
+  <div class="week__row">
+    <div class="week__main">Неделя: выучено <strong id="weekLearned">0</strong> из <span id="weekGoal">30</span></div>
+    <button class="week__edit" onclick="editGoal()">изменить норму</button>
+  </div>
+  <div class="week__bar"><div class="week__fill" id="weekFill" style="width:0%"></div></div>
+  <div class="week__sub" id="weekSub"></div>
+</div>
+
 <h1 id="deckTitle">🇬🇷 Греческий A2 — 1000 слов</h1>
 
 <div class="controls">
@@ -575,6 +604,7 @@ function updateStats() {
   document.getElementById('statLeft').textContent = Math.max(0, indices.length - currentIdx - 1);
   const learned = VOCAB.filter(w => (progress[cardKey(w)] || {}).box >= LEARNED_BOX).length;
   document.getElementById('statLearned').textContent = learned + ' / ' + VOCAB.length;
+  updateWeek();
 }
 
 // Progress: Leitner boxes synced to Supabase per user.
@@ -585,6 +615,8 @@ const INTERVALS = [0, 1, 3, 7, 14, 30]; // days until next review for boxes 0..5
 const LEARNED_BOX = 3;
 
 let progress = {};
+let weeklyGoal = 30;
+try { weeklyGoal = parseInt(localStorage.getItem('greekGoal')) || 30; } catch (e) {}
 let userKey = new URLSearchParams(location.search).get('k');
 try {
   if (userKey) localStorage.setItem('greekKey', userKey);
@@ -603,6 +635,41 @@ function addDays(days) {
   const d = new Date();
   d.setDate(d.getDate() + days);
   return d.toLocaleDateString('sv');
+}
+
+function weekStart(offsetWeeks = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + offsetWeeks * 7); // Monday
+  return d.toLocaleDateString('sv');
+}
+
+function countBetween(field, from, to) {
+  return Object.values(progress).filter(p => p[field] && p[field] >= from && (!to || p[field] < to)).length;
+}
+
+function updateWeek() {
+  const thisWeek = weekStart(), lastWeek = weekStart(-1);
+  const learned = countBetween('learned_at', thisWeek);
+  const started = countBetween('first_seen', thisWeek);
+  const lastLearned = countBetween('learned_at', lastWeek, thisWeek);
+  document.getElementById('weekLearned').textContent = learned;
+  document.getElementById('weekGoal').textContent = weeklyGoal;
+  document.getElementById('weekFill').style.width = Math.min(100, learned / weeklyGoal * 100) + '%';
+  document.getElementById('weekPanel').classList.toggle('done', learned >= weeklyGoal);
+  const daysLeft = 7 - ((new Date().getDay() + 6) % 7);
+  const status = learned >= weeklyGoal ? 'норма выполнена 🎉'
+    : `осталось ${weeklyGoal - learned}, дней до конца недели: ${daysLeft}`;
+  document.getElementById('weekSub').textContent =
+    `${status} · начато новых: ${started} · прошлая неделя: ${lastLearned} из ${weeklyGoal}`;
+}
+
+async function editGoal() {
+  const v = parseInt(prompt('Сколько карточек выучивать в неделю?', weeklyGoal));
+  if (!v || v < 1) return;
+  weeklyGoal = Math.min(v, 500);
+  try { localStorage.setItem('greekGoal', weeklyGoal); } catch (e) {}
+  updateWeek();
+  if (userKey) { try { await rpc('fc_set_goal', { p_goal: weeklyGoal }); } catch (e) {} }
 }
 
 function isDue(w) {
@@ -635,6 +702,7 @@ async function loadProgress() {
     const data = await rpc('fc_load', {});
     progress = {};
     data.progress.forEach(p => { progress[p.card_key] = p; });
+    weeklyGoal = data.weekly_goal || weeklyGoal;
     setUserBar(`👤 <strong>${data.name}</strong> · прогресс синхронизируется`);
     flushPending();
   } catch (e) {
@@ -650,6 +718,8 @@ function recordAnswer(w, correct) {
   p.box = correct ? Math.min(p.box + 1, INTERVALS.length - 1) : 0;
   p.due = addDays(INTERVALS[p.box]);
   if (correct) p.correct++; else p.wrong++;
+  p.first_seen = p.first_seen || today();
+  if (p.box >= LEARNED_BOX && !p.learned_at) p.learned_at = today();
   progress[key] = p;
   if (userKey) save(p);
 }
@@ -665,7 +735,8 @@ function setPending(q) {
 async function save(p) {
   try {
     await rpc('fc_save', { p_card_key: p.card_key, p_box: p.box, p_due: p.due,
-                           p_correct: p.correct, p_wrong: p.wrong });
+                           p_correct: p.correct, p_wrong: p.wrong,
+                           p_first_seen: p.first_seen || null, p_learned_at: p.learned_at || null });
   } catch (e) {
     const q = pendingQueue(); q[p.card_key] = p; setPending(q); // retry on next load
   }
