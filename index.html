@@ -715,8 +715,10 @@ function recordAnswer(w, correct) {
   if (!w) return;
   const key = cardKey(w);
   const p = progress[key] || { card_key: key, box: 0, correct: 0, wrong: 0 };
-  p.box = correct ? Math.min(p.box + 1, INTERVALS.length - 1) : 0;
-  p.due = addDays(INTERVALS[p.box]);
+  const due = !p.due || p.due <= today();
+  // A correct answer only advances the card when its review is due — no cramming the same card in one sitting
+  if (!correct) { p.box = 0; p.due = today(); }
+  else if (due) { p.box = Math.min(p.box + 1, INTERVALS.length - 1); p.due = addDays(INTERVALS[p.box]); }
   if (correct) p.correct++; else p.wrong++;
   p.first_seen = p.first_seen || today();
   if (p.box >= LEARNED_BOX && !p.learned_at) p.learned_at = today();
@@ -790,7 +792,17 @@ function toggleAutoSpeak() {
   try { localStorage.setItem('greekAutoSpeak', autoSpeak ? '1' : '0'); } catch (e) {}
 }
 
+// iOS Safari only lets a page speak from inside a tap. Speaking an empty phrase on the first tap
+// unlocks the synthesizer, so auto-play after answering works for the rest of the session.
+function unlockSpeech() {
+  speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+  document.removeEventListener('touchend', unlockSpeech);
+  document.removeEventListener('click', unlockSpeech);
+}
+
 if ('speechSynthesis' in window) {
+  document.addEventListener('touchend', unlockSpeech);
+  document.addEventListener('click', unlockSpeech);
   pickGreekVoice();
   speechSynthesis.addEventListener('voiceschanged', pickGreekVoice);
 }
